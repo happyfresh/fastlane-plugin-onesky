@@ -4,9 +4,18 @@ module Fastlane
       def self.run(params)
         Actions.verify_gem!('onesky-ruby')
         require 'onesky'
+        require 'json'
 
         client = ::Onesky::Client.new(params[:public_key], params[:secret_key])
         project = client.project(params[:project_id])
+        require_complete = params[:require_complete]
+
+        if require_complete
+          translation_status = JSON.parse(project.get_translation_status(file_name: params[:filename], locale: params[:locale]))
+          progress = translation_status['data']['progress']
+
+          raise "The '#{params[:locale]}' translation progress of file '#{params[:filename]}' is still #{progress}" unless progress.start_with?('100')
+        end
 
         UI.success "Downloading translation '#{params[:locale]}' of file '#{params[:filename]}' from OneSky to: '#{params[:destination]}'"
         resp = project.export_translation(source_file_name: params[:filename], locale: params[:locale])
@@ -69,7 +78,12 @@ module Fastlane
                                        optional: false,
                                        verify_block: proc do |value|
                                          raise "Please specify the filename of the desrtination file you want to download the translations to using `destination: 'filename'`".red unless value and !value.empty?
-                                       end)
+                                       end),
+          FastlaneCore::ConfigItem.new(key: :require_complete,
+                                       env_name: 'ONESKY_REQUIRE_COMPLETE',
+                                       is_string: false,
+                                       optional: true,
+                                       default_value: false)
         ]
       end
 
